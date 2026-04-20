@@ -1,5 +1,5 @@
 import mysql.connector
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, redirect
 
 app = Flask(__name__)
 
@@ -68,19 +68,6 @@ button:hover {
     background-color: #1a5fd1;
 }
 
-.status {
-    font-weight: bold;
-    margin-top: 10px;
-}
-
-.success {
-    color: green;
-}
-
-.warning {
-    color: #e67e22;
-}
-
 .nav-btn {
     background-color: #6c757d;
 }
@@ -100,55 +87,138 @@ button:hover {
 </style>
 """
 
-# ---------- HOME ----------
 @app.route('/')
 def home():
-    html = f"""
-    {base_style}
+    html = """
+    <style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f6f9;
+        margin: 0;
+    }
+
+    .container {
+        max-width: 800px;
+        margin: 50px auto;
+    }
+
+    .card {
+        background: white;
+        padding: 20px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    h1 {
+        margin-bottom: 5px;
+    }
+
+    input {
+        width: 100%;
+        padding: 8px;
+        margin: 8px 0;
+    }
+
+    button {
+        padding: 8px 14px;
+        background: #2c7be5;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #1a5fd1;
+    }
+
+    .row {
+        display: flex;
+        gap: 15px;
+    }
+
+    .col {
+        flex: 1;
+    }
+    </style>
+
     <div class="container">
 
         <div class="card">
             <h1>Delivery Tracker</h1>
-            <p>Track shipments and update delivery status.</p>
+            <p>Track and update shipment status</p>
         </div>
 
         <div class="row">
 
-            <div class="column">
-                <div class="card">
-                    <h2>Track Shipment</h2>
-                    <form action="/track" method="get">
-                        <label>Tracking ID</label>
-                        <input name="id" required>
-                        <button type="submit">Track</button>
-                    </form>
-                </div>
+            <div class="card col">
+                <h3>Track</h3>
+                <form action="/track" method="get">
+                    <input name="id" placeholder="Tracking ID" required>
+                    <button>Track</button>
+                </form>
             </div>
 
-            <div class="column">
-                <div class="card">
-                    <h2>Update Status</h2>
-                    <form action="/update" method="get">
-                        <label>Tracking ID</label>
-                        <input name="id" required>
-
-                        <label>Status</label>
-                        <input name="status" required placeholder="shipped / in transit / delivered">
-
-                        <button type="submit">Update</button>
-                    </form>
-                </div>
+            <div class="card col">
+                <h3>Update</h3>
+                <form action="/update" method="get">
+                    <input name="id" placeholder="Tracking ID" required>
+                    <input name="status" placeholder="Status" required>
+                    <button>Update</button>
+                </form>
             </div>
 
         </div>
 
         <div class="card">
-            <h2>Pending Shipments</h2>
-            <a href="/check">
-                <button>View Pending</button>
-            </a>
+            <a href="/check"><button>View Pending</button></a>
+            <a href="/create"><button style="margin-left:10px;">Create Entry</button></a>
         </div>
 
+    </div>
+    """
+    return render_template_string(html)
+
+
+# ---------- CREATE ----------
+@app.route('/create', methods=['GET', 'POST'])
+def create():
+    if request.method == 'POST':
+        tracking_id = request.form.get("tracking_id")
+        courier = request.form.get("courier")
+        status = request.form.get("status")
+
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO shipments (tracking_id, courier_name, status) VALUES (%s, %s, %s)",
+            (tracking_id, courier, status)
+        )
+        conn.commit()
+
+        return redirect('/')
+
+    html = f"""
+    {base_style}
+    <div class="container">
+        <div class="card">
+            <h2>Create Shipment</h2>
+
+            <form method="post">
+                <label>Tracking ID</label>
+                <input name="tracking_id" required>
+
+                <label>Courier Name</label>
+                <input name="courier" required>
+
+                <label>Status</label>
+                <input name="status" required>
+
+                <button type="submit">Submit</button>
+            </form>
+
+            <a href="/"><button class="nav-btn">Back</button></a>
+        </div>
     </div>
     """
     return render_template_string(html)
@@ -167,8 +237,6 @@ def track():
     result = cursor.fetchone()
 
     if result:
-        status_class = "success" if result[2] == "delivered" else "warning"
-
         html = f"""
         {base_style}
         <div class="container">
@@ -176,7 +244,7 @@ def track():
                 <h2>Shipment Details</h2>
                 <p><b>Tracking ID:</b> {result[0]}</p>
                 <p><b>Courier:</b> {result[1]}</p>
-                <p class="status {status_class}"><b>Status:</b> {result[2]}</p>
+                <p><b>Status:</b> {result[2]}</p>
 
                 <a href="/"><button class="nav-btn">Back</button></a>
             </div>
@@ -184,16 +252,7 @@ def track():
         """
         return render_template_string(html)
     else:
-        return render_template_string(f"""
-        {base_style}
-        <div class="container">
-            <div class="card">
-                <h2>Result</h2>
-                <p>No shipment found.</p>
-                <a href="/"><button class="nav-btn">Back</button></a>
-            </div>
-        </div>
-        """)
+        return "Not found"
 
 
 # ---------- UPDATE ----------
@@ -209,17 +268,7 @@ def update():
     )
     conn.commit()
 
-    html = f"""
-    {base_style}
-    <div class="container">
-        <div class="card">
-            <h2>Status Updated</h2>
-            <p><b>{tracking_id}</b> has been updated to <b>{new_status}</b>.</p>
-            <a href="/"><button class="nav-btn">Back</button></a>
-        </div>
-    </div>
-    """
-    return render_template_string(html)
+    return redirect('/')
 
 
 # ---------- CHECK ----------
@@ -235,14 +284,14 @@ def check():
 
     rows = ""
     for row in results:
-        rows += f"<p><b>{row[0]}</b> — {row[1]}</p>"
+        rows += f"<p>{row[0]} — {row[1]}</p>"
 
     html = f"""
     {base_style}
     <div class="container">
         <div class="card">
             <h2>Pending Shipments</h2>
-            {rows if rows else "<p>All shipments have been delivered.</p>"}
+            {rows if rows else "All delivered"}
             <a href="/"><button class="nav-btn">Back</button></a>
         </div>
     </div>
